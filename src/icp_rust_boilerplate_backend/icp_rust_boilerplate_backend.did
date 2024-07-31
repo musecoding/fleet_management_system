@@ -1,0 +1,137 @@
+type Booking = record {
+  id : nat64;
+  status : text;
+  vehicle_id : nat64;
+  created_at : nat64;
+  end_time : nat64;
+  start_time : nat64;
+  driver_id : nat64;
+  to_location : text;
+  from_location : text;
+};
+type BookingPayload = record {
+  vehicle_id : nat64;
+  end_time : nat64;
+  start_time : nat64;
+  driver_id : nat64;
+  to_location : text;
+  from_location : text;
+};
+type Driver = record {
+  id : nat64;
+  license_number : text;
+  name : text;
+  created_at : nat64;
+  contact_info : text;
+  points : nat64;
+};
+type DriverPayload = record {
+  license_number : text;
+  name : text;
+  contact_info : text;
+};
+type EmergencyAssistance = record {
+  id : nat64;
+  status : text;
+  vehicle_id : nat64;
+  description : text;
+  created_at : nat64;
+  location : text;
+};
+type EmergencyAssistancePayload = record {
+  vehicle_id : nat64;
+  description : text;
+  location : text;
+};
+type FuelConsumption = record {
+  id : nat64;
+  vehicle_id : nat64;
+  date : nat64;
+  amount : float64;
+};
+type FuelConsumptionPayload = record {
+  vehicle_id : nat64;
+  date : nat64;
+  amount : float64;
+};
+type Maintenance = record {
+  id : nat64;
+  status : text;
+  vehicle_id : nat64;
+  description : text;
+  created_at : nat64;
+  scheduled_date : nat64;
+};
+type MaintenancePayload = record {
+  vehicle_id : nat64;
+  description : text;
+  scheduled_date : nat64;
+};
+type Message = variant {
+  Error : text;
+  InvalidPayload : text;
+  NotFound : text;
+  Success : text;
+};
+type Result = variant { Ok : Booking; Err : Message };
+type Result_1 = variant { Ok : Driver; Err : Message };
+type Result_10 = variant { Ok : Maintenance; Err : Message };
+type Result_11 = variant { Ok : vec Maintenance; Err : Message };
+type Result_12 = variant { Ok : vec Route; Err : Message };
+type Result_13 = variant { Ok : vec Vehicle; Err : Message };
+type Result_2 = variant { Ok : Route; Err : Message };
+type Result_3 = variant { Ok : Vehicle; Err : Message };
+type Result_4 = variant { Ok : vec Booking; Err : Message };
+type Result_5 = variant { Ok : vec Driver; Err : Message };
+type Result_6 = variant { Ok : EmergencyAssistance; Err : Message };
+type Result_7 = variant { Ok : vec EmergencyAssistance; Err : Message };
+type Result_8 = variant { Ok : FuelConsumption; Err : Message };
+type Result_9 = variant { Ok : vec FuelConsumption; Err : Message };
+type Route = record {
+  id : nat64;
+  optimized_route : text;
+  distance : float64;
+  to_location : text;
+  time_estimate : nat64;
+  from_location : text;
+};
+type RoutePayload = record { to_location : text; from_location : text };
+type Vehicle = record {
+  id : nat64;
+  status : VehicleStatus;
+  model : text;
+  registration_number : text;
+  created_at : nat64;
+  capacity : nat64;
+  location : text;
+};
+type VehiclePayload = record {
+  model : text;
+  registration_number : text;
+  capacity : nat64;
+  location : text;
+};
+type VehicleStatus = variant { Available; Maintenance; Booked };
+service : {
+  create_booking : (BookingPayload) -> (Result);
+  create_driver : (DriverPayload) -> (Result_1);
+  create_route : (RoutePayload) -> (Result_2);
+  create_vehicle : (VehiclePayload) -> (Result_3);
+  get_booking_by_id : (nat64) -> (Result) query;
+  get_bookings : () -> (Result_4) query;
+  get_driver_by_id : (nat64) -> (Result_1) query;
+  get_drivers : () -> (Result_5) query;
+  get_emergency_assistance_by_id : (nat64) -> (Result_6) query;
+  get_emergency_assistances : () -> (Result_7) query;
+  get_fuel_consumption_by_id : (nat64) -> (Result_8) query;
+  get_fuel_consumptions : () -> (Result_9) query;
+  get_maintenance_by_id : (nat64) -> (Result_10) query;
+  get_maintenances : () -> (Result_11) query;
+  get_route_by_id : (nat64) -> (Result_2) query;
+  get_routes : () -> (Result_12) query;
+  get_vehicle_by_id : (nat64) -> (Result_3) query;
+  get_vehicles : () -> (Result_13) query;
+  record_fuel_consumption : (FuelConsumptionPayload) -> (Result_8);
+  request_emergency_assistance : (EmergencyAssistancePayload) -> (Result_6);
+  schedule_maintenance : (MaintenancePayload) -> (Result_10);
+}

@@ -134,4 +134,7 @@ service : {
   record_fuel_consumption : (FuelConsumptionPayload) -> (Result_8);
   request_emergency_assistance : (EmergencyAssistancePayload) -> (Result_6);
   schedule_maintenance : (MaintenancePayload) -> (Result_10);
+  update_booking_status : (nat64, text) -> (Result);
+  update_emergency_assistance_status : (nat64, text) -> (Result_6);
+  update_maintenance_status : (nat64, text) -> (Result_10);
 }

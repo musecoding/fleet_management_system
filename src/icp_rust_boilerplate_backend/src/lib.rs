@@ -1,11 +1,13 @@
 #[macro_use]
 extern crate serde;
+
 use candid::{Decode, Encode};
 use ic_cdk::api::time;
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
 use ic_stable_structures::{BoundedStorable, Cell, DefaultMemoryImpl, StableBTreeMap, Storable};
 use std::{borrow::Cow, cell::RefCell};
 
+// Type definitions
 type Memory = VirtualMemory<DefaultMemoryImpl>;
 type IdCell = Cell<u64, Memory>;
 
@@ -33,7 +35,7 @@ enum VehicleStatus {
 }
 
 // Driver struct
-#[derive(candid::CandidType, Clone, Serialize, Deserialize, Default)]
+#[derive(candid::CandidType, Clone, Serialize, Deserialize, Default, Debug)]
 struct Driver {
     id: u64,
     name: String,
@@ -44,7 +46,7 @@ struct Driver {
 }
 
 // Vehicle struct
-#[derive(candid::CandidType, Clone, Serialize, Deserialize, Default)]
+#[derive(candid::CandidType, Clone, Serialize, Deserialize, Default, Debug)]
 struct Vehicle {
     id: u64,
     registration_number: String,
@@ -56,11 +58,10 @@ struct Vehicle {
 }
 
 // Booking struct
-#[derive(candid::CandidType, Clone, Serialize, Deserialize, Default)]
+#[derive(candid::CandidType, Clone, Serialize, Deserialize, Default, Debug)]
 struct Booking {
     id: u64,
     vehicle_id: u64,
-    // user_id: u64,
     driver_id: u64,
     from_location: String,
     to_location: String,
@@ -71,7 +72,7 @@ struct Booking {
 }
 
 // Fuel Consumption struct
-#[derive(candid::CandidType, Clone, Serialize, Deserialize, Default)]
+#[derive(candid::CandidType, Clone, Serialize, Deserialize, Default, Debug)]
 struct FuelConsumption {
     id: u64,
     vehicle_id: u64,
@@ -80,7 +81,7 @@ struct FuelConsumption {
 }
 
 // Maintenance struct
-#[derive(candid::CandidType, Clone, Serialize, Deserialize, Default)]
+#[derive(candid::CandidType, Clone, Serialize, Deserialize, Default, Debug)]
 struct Maintenance {
     id: u64,
     vehicle_id: u64,
@@ -91,7 +92,7 @@ struct Maintenance {
 }
 
 // Emergency Assistance struct
-#[derive(candid::CandidType, Clone, Serialize, Deserialize, Default)]
+#[derive(candid::CandidType, Clone, Serialize, Deserialize, Default, Debug)]
 struct EmergencyAssistance {
     id: u64,
     vehicle_id: u64,
@@ -102,7 +103,7 @@ struct EmergencyAssistance {
 }
 
 // Route struct for optimization
-#[derive(candid::CandidType, Clone, Serialize, Deserialize, Default)]
+#[derive(candid::CandidType, Clone, Serialize, Deserialize, Default, Debug)]
 struct Route {
     id: u64,
     from_location: String,
@@ -284,7 +285,6 @@ struct VehiclePayload {
 #[derive(candid::CandidType, Deserialize, Serialize)]
 struct BookingPayload {
     vehicle_id: u64,
-    // user_id: u64,
     driver_id: u64,
     from_location: String,
     to_location: String,
@@ -328,35 +328,39 @@ enum Message {
     InvalidPayload(String),
 }
 
+// Helper function to generate unique IDs
+fn generate_unique_id() -> u64 {
+    ID_COUNTER.with(|counter| {
+        let current_value = *counter.borrow().get();
+        counter.borrow_mut().set(current_value + 1).expect("Failed to update ID counter");
+        current_value + 1
+    })
+}
+
 // Function to create a new driver
 #[ic_cdk::update]
 fn create_driver(payload: DriverPayload) -> Result<Driver, Message> {
-    if payload.name.is_empty()
-        || payload.license_number.is_empty()
-        || payload.contact_info.is_empty()
+    if payload.name.trim().is_empty()
+        || payload.license_number.trim().is_empty()
+        || payload.contact_info.trim().is_empty()
     {
         return Err(Message::InvalidPayload(
             "Ensure 'name', 'license_number', and 'contact_info' are provided.".to_string(),
         ));
     }
 
-    // Validate the driver's license number by checking if it exists in any vehicle
-    let license_exists = VEHICLE_STORAGE.with(|storage| {
-        storage.borrow().iter().any(|(_, vehicle)| vehicle.registration_number == payload.license_number)
+    // Validate the driver's license number is unique
+    let license_exists = DRIVER_STORAGE.with(|storage| {
+        storage.borrow().iter().any(|(_, driver)| driver.license_number == payload.license_number)
     });
 
-    if !license_exists {
+    if license_exists {
         return Err(Message::InvalidPayload(
-            "Driver's license number does not exist in any vehicle.".to_string(),
+            "Driver's license number already exists.".to_string(),
         ));
     }
 
-    let id = ID_COUNTER
-        .with(|counter| {
-            let current_value = *counter.borrow().get();
-            counter.borrow_mut().set(current_value + 1)
-        })
-        .expect("Cannot increment ID counter");
+    let id = generate_unique_id();
 
     let driver = Driver {
         id,
@@ -370,7 +374,6 @@ fn create_driver(payload: DriverPayload) -> Result<Driver, Message> {
     DRIVER_STORAGE.with(|storage| storage.borrow_mut().insert(id, driver.clone()));
     Ok(driver)
 }
-
 
 // Function to get all drivers
 #[ic_cdk::query]
@@ -404,10 +407,10 @@ fn get_driver_by_id(id: u64) -> Result<Driver, Message> {
 // Function to create a new vehicle
 #[ic_cdk::update]
 fn create_vehicle(payload: VehiclePayload) -> Result<Vehicle, Message> {
-    if payload.registration_number.is_empty()
-        || payload.model.is_empty()
+    if payload.registration_number.trim().is_empty()
+        || payload.model.trim().is_empty()
         || payload.capacity == 0
-        || payload.location.is_empty()
+        || payload.location.trim().is_empty()
     {
         return Err(Message::InvalidPayload(
             "Ensure 'registration_number', 'model', 'capacity', and 'location' are provided."
@@ -415,12 +418,18 @@ fn create_vehicle(payload: VehiclePayload) -> Result<Vehicle, Message> {
         ));
     }
 
-    let id = ID_COUNTER
-        .with(|counter| {
-            let current_value = *counter.borrow().get();
-            counter.borrow_mut().set(current_value + 1)
-        })
-        .expect("Cannot increment ID counter");
+    // Check if the registration number is unique
+    let reg_number_exists = VEHICLE_STORAGE.with(|storage| {
+        storage.borrow().iter().any(|(_, vehicle)| vehicle.registration_number == payload.registration_number)
+    });
+
+    if reg_number_exists {
+        return Err(Message::InvalidPayload(
+            "Vehicle registration number already exists.".to_string(),
+        ));
+    }
+
+    let id = generate_unique_id();
 
     let vehicle = Vehicle {
         id,
@@ -469,8 +478,12 @@ fn get_vehicle_by_id(id: u64) -> Result<Vehicle, Message> {
 #[ic_cdk::update]
 fn create_booking(payload: BookingPayload) -> Result<Booking, Message> {
     // Validate the booking payload
-    if payload.from_location.is_empty() || payload.to_location.is_empty() {
+    if payload.from_location.trim().is_empty() || payload.to_location.trim().is_empty() {
         return Err(Message::InvalidPayload("Ensure 'from_location', 'to_location', and valid 'start_time' and 'end_time' are provided.".to_string()));
+    }
+
+    if payload.start_time >= payload.end_time {
+        return Err(Message::InvalidPayload("Start time must be before end time.".to_string()));
     }
 
     // Validate the driver ID
@@ -504,12 +517,7 @@ fn create_booking(payload: BookingPayload) -> Result<Booking, Message> {
         ));
     }
 
-    let id = ID_COUNTER
-        .with(|counter| {
-            let current_value = *counter.borrow().get();
-            counter.borrow_mut().set(current_value + 1)
-        })
-        .expect("Cannot increment ID counter");
+    let id = generate_unique_id();
 
     let booking = Booking {
         id,
@@ -535,6 +543,33 @@ fn create_booking(payload: BookingPayload) -> Result<Booking, Message> {
     });
 
     BOOKING_STORAGE.with(|storage| storage.borrow_mut().insert(id, booking.clone()));
+    Ok(booking)
+}
+
+// Function to update a booking status
+#[ic_cdk::update]
+fn update_booking_status(id: u64, new_status: String) -> Result<Booking, Message> {
+    let mut booking = BOOKING_STORAGE.with(|storage| {
+        storage
+            .borrow()
+            .get(&id)
+            .map(|booking| booking.clone())
+            .ok_or(Message::NotFound("Booking not found".to_string()))
+    })?;
+
+    // Validate status transitions
+    match (booking.status.as_str(), new_status.as_str()) {
+        ("pending", "approved") | ("approved", "completed") => {
+            booking.status = new_status.clone();
+        }
+        _ => {
+            return Err(Message::Error("Invalid status transition.".to_string()));
+        }
+    }
+
+    // Update the booking status
+    BOOKING_STORAGE.with(|storage| storage.borrow_mut().insert(id, booking.clone()));
+
     Ok(booking)
 }
 
@@ -590,12 +625,7 @@ fn record_fuel_consumption(payload: FuelConsumptionPayload) -> Result<FuelConsum
     }
 
     // Update the fuel consumption record
-    let id = ID_COUNTER
-        .with(|counter| {
-            let current_value = *counter.borrow().get();
-            counter.borrow_mut().set(current_value + 1)
-        })
-        .expect("Cannot increment ID counter");
+    let id = generate_unique_id();
 
     let fuel_consumption = FuelConsumption {
         id,
@@ -646,7 +676,7 @@ fn get_fuel_consumption_by_id(id: u64) -> Result<FuelConsumption, Message> {
 #[ic_cdk::update]
 fn schedule_maintenance(payload: MaintenancePayload) -> Result<Maintenance, Message> {
     // Validate the maintenance payload
-    if payload.description.is_empty() || payload.scheduled_date <= current_time() {
+    if payload.description.trim().is_empty() || payload.scheduled_date <= current_time() {
         return Err(Message::InvalidPayload(
             "Ensure 'description' and valid 'scheduled_date' are provided.".to_string(),
         ));
@@ -665,12 +695,7 @@ fn schedule_maintenance(payload: MaintenancePayload) -> Result<Maintenance, Mess
     }
 
     // Update the maintenance record
-    let id = ID_COUNTER
-        .with(|counter| {
-            let current_value = *counter.borrow().get();
-            counter.borrow_mut().set(current_value + 1)
-        })
-        .expect("Cannot increment ID counter");
+    let id = generate_unique_id();
 
     let maintenance = Maintenance {
         id,
@@ -682,6 +707,33 @@ fn schedule_maintenance(payload: MaintenancePayload) -> Result<Maintenance, Mess
     };
 
     MAINTENANCE_STORAGE.with(|storage| storage.borrow_mut().insert(id, maintenance.clone()));
+    Ok(maintenance)
+}
+
+// Function to update maintenance status
+#[ic_cdk::update]
+fn update_maintenance_status(id: u64, new_status: String) -> Result<Maintenance, Message> {
+    let mut maintenance = MAINTENANCE_STORAGE.with(|storage| {
+        storage
+            .borrow()
+            .get(&id)
+            .map(|maintenance| maintenance.clone())
+            .ok_or(Message::NotFound("Maintenance record not found".to_string()))
+    })?;
+
+    // Validate status transitions
+    match (maintenance.status.as_str(), new_status.as_str()) {
+        ("pending", "completed") => {
+            maintenance.status = new_status.clone();
+        }
+        _ => {
+            return Err(Message::Error("Invalid status transition.".to_string()));
+        }
+    }
+
+    // Update the maintenance status
+    MAINTENANCE_STORAGE.with(|storage| storage.borrow_mut().insert(id, maintenance.clone()));
+
     Ok(maintenance)
 }
 
@@ -724,7 +776,7 @@ fn request_emergency_assistance(
     payload: EmergencyAssistancePayload,
 ) -> Result<EmergencyAssistance, Message> {
     // Validate the emergency assistance payload
-    if payload.description.is_empty() || payload.location.is_empty() {
+    if payload.description.trim().is_empty() || payload.location.trim().is_empty() {
         return Err(Message::InvalidPayload(
             "Ensure 'description' and 'location' are provided.".to_string(),
         ));
@@ -743,12 +795,7 @@ fn request_emergency_assistance(
     }
 
     // Update the emergency assistance record
-    let id = ID_COUNTER
-        .with(|counter| {
-            let current_value = *counter.borrow().get();
-            counter.borrow_mut().set(current_value + 1)
-        })
-        .expect("Cannot increment ID counter");
+    let id = generate_unique_id();
 
     let assistance = EmergencyAssistance {
         id,
@@ -761,6 +808,33 @@ fn request_emergency_assistance(
 
     EMERGENCY_ASSISTANCE_STORAGE
         .with(|storage| storage.borrow_mut().insert(id, assistance.clone()));
+    Ok(assistance)
+}
+
+// Function to update emergency assistance status
+#[ic_cdk::update]
+fn update_emergency_assistance_status(id: u64, new_status: String) -> Result<EmergencyAssistance, Message> {
+    let mut assistance = EMERGENCY_ASSISTANCE_STORAGE.with(|storage| {
+        storage
+            .borrow()
+            .get(&id)
+            .map(|assistance| assistance.clone())
+            .ok_or(Message::NotFound("Emergency assistance record not found".to_string()))
+    })?;
+
+    // Validate status transitions
+    match (assistance.status.as_str(), new_status.as_str()) {
+        ("pending", "resolved") => {
+            assistance.status = new_status.clone();
+        }
+        _ => {
+            return Err(Message::Error("Invalid status transition.".to_string()));
+        }
+    }
+
+    // Update the assistance status
+    EMERGENCY_ASSISTANCE_STORAGE.with(|storage| storage.borrow_mut().insert(id, assistance.clone()));
+
     Ok(assistance)
 }
 
@@ -801,18 +875,13 @@ fn get_emergency_assistance_by_id(id: u64) -> Result<EmergencyAssistance, Messag
 #[ic_cdk::update]
 fn create_route(payload: RoutePayload) -> Result<Route, Message> {
     // Validate the route payload
-    if payload.from_location.is_empty() || payload.to_location.is_empty() {
+    if payload.from_location.trim().is_empty() || payload.to_location.trim().is_empty() {
         return Err(Message::InvalidPayload(
             "Ensure 'from_location' and 'to_location' are provided.".to_string(),
         ));
     }
 
-    let id = ID_COUNTER
-        .with(|counter| {
-            let current_value = *counter.borrow().get();
-            counter.borrow_mut().set(current_value + 1)
-        })
-        .expect("Cannot increment ID counter");
+    let id = generate_unique_id();
 
     // Dummy data for route optimization
     let optimized_route = format!(
